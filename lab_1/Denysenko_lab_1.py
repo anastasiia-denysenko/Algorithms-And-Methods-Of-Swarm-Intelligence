@@ -284,7 +284,7 @@ class Genetic_optimization_for_x_and_y:
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         plt.show()
-        name = "/Users/anastasiiadenysenko/Desktop/genetic_" + list(str(self.func).split(' '))[1] + ".gif"
+        name = "/genetic_" + list(str(self.func).split(' '))[1] + ".gif"
         ani.save(filename=name, dpi=300, writer=PillowWriter(fps=25))
     def plot_bests(self):
         pop_x, pop_y, pop_z, bests_x, bests_y, bests_z = self.optimize_and_store_x_and_y()
@@ -509,7 +509,7 @@ class Wolves_optimization:
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         plt.show()
-        name = "/Users/anastasiiadenysenko/Desktop/wolves_" + list(str(self.func).split(' '))[1] + ".gif"
+        name = "/wolves_" + list(str(self.func).split(' '))[1] + ".gif"
         ani.save(filename=name, dpi=300, writer=PillowWriter(fps=25))
 """
 w1 = Wolves_optimization(erkli, 60, 20, 0.1, -5, 5, 0.1, -5, 5, minimize = False)
