@@ -6,7 +6,6 @@ import matplotlib
 import matplotlib.animation as animation
 from matplotlib.ticker import LinearLocator
 from copy import deepcopy
-import math
 from functions import mishra_bird, rastrigin, Rosenbrock, erkli
 
 class PSO(object):
