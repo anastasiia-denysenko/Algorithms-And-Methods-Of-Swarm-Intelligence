@@ -27,7 +27,7 @@ class Fireflies:
         self.population = self.create_first_population()
         self.curr_iter = 0
         self.best_position = self.population[0, 0]
-        self.best_value = self.evaluate(self.best_position)
+        self.best_value = self.func(self.best_position)
         self.history = [self.best_value]
 
     def create_first_population(self):
@@ -38,11 +38,8 @@ class Fireflies:
             population[:, :, d] = coords
         return population
 
-    def evaluate(self, position):
-        return self.func(position)
-
     def brightness(self, position):
-        val = self.evaluate(position)
+        val = self.func(position)
         return -val if self.minimize else val
 
     def iter(self):
@@ -53,7 +50,7 @@ class Fireflies:
 
                 if (bright_ij > self.brightness(self.best_position)):
                     self.best_position = pos_ij.copy()
-                    self.best_value = self.evaluate(self.best_position)
+                    self.best_value = self.func(self.best_position)
 
                 for k in range(self.size_pop):
                     for m in range(self.size_pop):
@@ -141,7 +138,7 @@ class Fireflies:
             pop_scat._offsets3d = (xs, ys, zs)
 
             best_x, best_y = self.best_position
-            best_z = self.evaluate(self.best_position)
+            best_z = self.func(self.best_position)
             best_scat._offsets3d = ([best_x], [best_y], [best_z])
 
             ax.set_title(f"Fireflies Iteration {frame + 1}")
