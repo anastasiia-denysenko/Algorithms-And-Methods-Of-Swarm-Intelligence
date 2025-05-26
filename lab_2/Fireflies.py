@@ -7,108 +7,150 @@ import matplotlib.animation as animation
 from matplotlib.animation import PillowWriter
 from matplotlib.ticker import LinearLocator
 from copy import deepcopy
+from functions import *
 
 class Fireflies:
-    def __init__(self, func, beta_max, gamma, alpha, max_iter, size_pop, x_min, x_max, y_min, y_max, minimize = True):
-        if beta_max <= 0 or beta_max >= 1:
-            raise ValueError("Beta_max has to be in range (0, 1), but given value is {i}".format(i = beta_max))
-        if gamma <= 0 or gamma >= 1:
-            raise ValueError("Gamma has to be in range (0, 1), but given value is {i}".format(i = gamma))
-        if alpha < 0 or alpha > 1:
-            raise ValueError("Alpha has to be in range [0, 1], but given value is {i}".format(i = alpha))
+    def __init__(self, func, beta_max, gamma, alpha, max_iter, size_pop, limitations, minimize=True):
+        if not (0 < beta_max < 1): raise ValueError(f"beta_max must be in (0, 1), got {beta_max}")
+        if not (0 < gamma < 1): raise ValueError(f"gamma must be in (0, 1), got {gamma}")
+        if not (0 <= alpha <= 1): raise ValueError(f"alpha must be in [0, 1], got {alpha}")
+
         self.func = func
         self.beta_max = beta_max
         self.gamma = gamma
         self.alpha = alpha
         self.max_iter = max_iter
         self.size_pop = size_pop
-        self.x_min = x_min
-        self.x_max = x_max
-        self.y_min = y_min
-        self.y_max = y_max
+        self.limitations = np.array(limitations)
+        self.dim = len(self.limitations)
         self.minimize = minimize
-        self.pop_x, self.pop_y = self.create_first_population()
+        self.population = self.create_first_population()
         self.curr_iter = 0
-        self.x_ideal = self.pop_x[0][0]
-        self.y_ideal = self.pop_y[0][0]
+        self.best_position = self.population[0, 0]
+        self.best_value = self.evaluate(self.best_position)
+        self.history = [self.best_value]
+
     def create_first_population(self):
-        p_x, p_y = [], []
-        for i in range(self.size_pop):
-            p_x.append(self.x_min + (self.x_max - self.x_min)*random.uniform(0, 1))
-            p_y.append(self.y_min + (self.y_max - self.y_min)*random.uniform(0, 1))
-        self.pop_x = np.array(p_x)
-        self.pop_y = np.array(p_y)
-        self.pop_x, self.pop_y = np.meshgrid(self.pop_x, self.pop_y)
-        return self.pop_x, self.pop_y
+        population = np.empty((self.size_pop, self.size_pop, self.dim))
+        for d in range(self.dim):
+            low, high = self.limitations[d]
+            coords = low + (high - low) * np.random.rand(self.size_pop, self.size_pop)
+            population[:, :, d] = coords
+        return population
+
+    def evaluate(self, position):
+        return self.func(position)
+
+    def brightness(self, position):
+        val = self.evaluate(position)
+        return -val if self.minimize else val
+
     def iter(self):
         for i in range(self.size_pop):
             for j in range(self.size_pop):
-                if self.func(self.pop_x[i][j], self.y_ideal) < self.func(self.x_ideal, self.y_ideal):
-                    self.x_ideal = self.pop_x[i][j]
-                if self.func(self.x_ideal, self.pop_y[i][j]) < self.func(self.x_ideal, self.y_ideal):
-                    self.y_ideal = self.pop_y[i][j]
+                pos_ij = self.population[i, j]
+                bright_ij = self.brightness(pos_ij)
+
+                if (bright_ij > self.brightness(self.best_position)):
+                    self.best_position = pos_ij.copy()
+                    self.best_value = self.evaluate(self.best_position)
+
                 for k in range(self.size_pop):
                     for m in range(self.size_pop):
-                        if self.func(self.pop_x[i][j], self.y_ideal) < self.func(self.pop_x[k][m], self.y_ideal):
-                            beta = self.beta_max*np.e**(-self.gamma*(self.pop_x[i][j] - self.pop_x[k][m])**2)
-                            self.pop_x[k][m] += beta*(self.pop_x[i][j] - self.pop_x[k][m]) + self.alpha*(random.uniform(0, 1) - 0.5)
-                            if self.pop_x[k][m] < self.x_min:
-                                self.pop_x[k][m] = self.x_min
-                            elif self.pop_x[k][m] > self.x_max:
-                                self.pop_x[k][m] = self.x_max
-                        if self.func(self.x_ideal, self.pop_y[i][j]) < self.func(self.x_ideal, self.pop_y[k][m]):
-                            beta = self.beta_max*np.e**(-self.gamma*(self.pop_y[i][j] - self.pop_y[k][m])**2)
-                            self.pop_y[k][m] += beta*(self.pop_y[i][j] - self.pop_y[k][m]) + self.alpha*(random.uniform(0, 1) - 0.5)
-                            if self.pop_y[k][m] < self.y_min:
-                                self.pop_y[k][m] = self.y_min
-                            elif self.pop_y[k][m] > self.y_max:
-                                self.pop_y[k][m] = self.y_max
+                        pos_km = self.population[k, m]
+                        bright_km = self.brightness(pos_km)
+
+                        if bright_ij > bright_km:
+                            dist_sq = np.sum((pos_ij - pos_km) ** 2)
+                            beta = self.beta_max * np.exp(-self.gamma * dist_sq)
+                            rand = self.alpha * (np.random.rand(self.dim) - 0.5)
+
+                            self.population[k, m] += beta * (pos_ij - pos_km) + rand
+
+                            for d in range(self.dim):
+                                low, high = self.limitations[d]
+                                self.population[k, m, d] = np.clip(self.population[k, m, d], low, high)
+
         self.curr_iter += 1
-        return self.pop_x, self.pop_y, self.x_ideal, self.y_ideal
+        return self.population, self.best_position
+
     def run(self):
-        while self.curr_iter != self.max_iter:
+        while self.curr_iter < self.max_iter:
             self.iter()
-        return self.pop_x, self.pop_y, self.x_ideal, self.y_ideal
+            self.history.append(self.best_value)
+        return self.population, self.best_position
+    
+    def plot_score(self):
+        self.run()
+        plt.plot([i for i in range(len(self.history))], self.history)
+        plt.xlabel('Iterations')
+        plt.ylabel('Function values')
+        plt.title('Best value found: {V}'.format(V = self.history[-1]))
+        plt.grid()
+        plt.show()
+
     def plot(self):
+        if self.dim != 2:
+            raise ValueError("Visualization only supported for 2D problems.")
+
         self.run()
         fig = plt.figure()
-        ax = fig.add_subplot(111,projection='3d')
-        X, Y = np.arange(self.x_min, self.x_max, 0.01), np.arange(self.y_min, self.y_max, 0.01)
+        ax = fig.add_subplot(111, projection='3d')
+
+        X = np.linspace(self.limitations[0][0], self.limitations[0][1], 200)
+        Y = np.linspace(self.limitations[1][0], self.limitations[1][1], 200)
         X, Y = np.meshgrid(X, Y)
-        Z = self.func(X, Y)
+        Z = np.array([[self.func(np.array([x, y])) for x, y in zip(row_x, row_y)] for row_x, row_y in zip(X, Y)])
+
         surf = ax.plot_surface(X, Y, Z, cmap=matplotlib.cm.viridis, linewidth=0, antialiased=False, alpha=0.25)
-        ax.set_zlim(Z.min(), Z.max())
         ax.zaxis.set_major_locator(LinearLocator(10))
         ax.zaxis.set_major_formatter('{x:.02f}')
-        ax.scatter(self.x_ideal, self.y_ideal, self.func(self.x_ideal, self.y_ideal), c = 'orchid')
+        ax.scatter(self.best_position[1], self.best_position[0], self.func(self.best_position[1], self.best_position[0]), color='orchid')
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         plt.show()
+
     def run_and_plot(self):
-        X, Y = np.arange(self.x_min, self.x_max, 0.01), np.arange(self.y_min, self.y_max, 0.01)
+        if self.dim != 2:
+            raise ValueError("Visualization only supported for 2D problems.")
+        X = np.linspace(self.limitations[0][0], self.limitations[0][1], 200)
+        Y = np.linspace(self.limitations[1][0], self.limitations[1][1], 200)
         X, Y = np.meshgrid(X, Y)
-        Z = self.func(X, Y)
-        def update_graph(num):
-            self.iter()
-            for i in range(self.size_pop):
-                pop_z = []
-                for j in range(self.size_pop):
-                    pop_z.append(self.func(self.pop_x[i][j], self.pop_y[i][j]))
-                all_pop._offsets3d = (self.pop_x[i], self.pop_y[i], pop_z)
-            best._offsets3d = ([self.x_ideal], [self.y_ideal], [self.func(self.x_ideal, self.y_ideal)])
-            title.set_text('Fireflies, iteration {}'.format(num+1))
+        Z = np.array([[self.func(np.array([x, y])) for x, y in zip(row_x, row_y)] for row_x, row_y in zip(X, Y)])
+
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        title = ax.set_title('Fireflies')
-        all_pop = ax.scatter(self.pop_x[0][0], self.pop_y[0][0], self.func(self.pop_x[0][0], self.pop_y[0][0]), c = 'cornflowerblue', zorder = 1)
-        best = ax.scatter([self.x_min], [self.y_min], [self.func(self.x_min, self.y_min)], c = 'orchid', zorder = 1)
-        surf = ax.plot_surface(X, Y, Z, cmap = matplotlib.cm.viridis, linewidth=0, antialiased = False, alpha=0.25)
-        ani = matplotlib.animation.FuncAnimation(fig, update_graph, self.max_iter, interval=60, blit=False, repeat=False)
-        ani.save(str(random.uniform(100000, 900000))+'.gif', dpi=300, writer=PillowWriter(fps=25))
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.axes.set_xlim3d(left=self.x_min, right=self.x_max)
-        ax.axes.set_ylim3d(bottom=self.y_min, top=self.y_max) 
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        ax.set_xlim(*self.limitations[0])
+        ax.set_ylim(*self.limitations[1])
+        ax.set_zlim(np.nanmin(Z), np.nanmax(Z)) if not np.isinf(np.nanmax(Z)) else ax.set_zlim(np.nanmin(Z), 500)
+        surf = ax.plot_surface(X, Y, Z, cmap=matplotlib.cm.viridis, alpha=0.3)
+        pop_scat = ax.scatter([], [], [], c='cornflowerblue')
+        best_scat = ax.scatter([], [], [], c='orchid')
+
+        def update(frame):
+            self.population, self.best_position = self.iter()
+            flat_pop = self.population.reshape(-1, self.dim)
+            xs = flat_pop[:, 0]
+            ys = flat_pop[:, 1]
+            zs = np.array([self.func(p) for p in flat_pop])
+
+            pop_scat._offsets3d = (xs, ys, zs)
+
+            best_x, best_y = self.best_position
+            best_z = self.evaluate(self.best_position)
+            best_scat._offsets3d = ([best_x], [best_y], [best_z])
+
+            ax.set_title(f"Fireflies Iteration {frame + 1}")
+
+        ani = matplotlib.animation.FuncAnimation(fig, update, frames=self.max_iter, interval=100, repeat=False)
+        #ani.save(str(random.uniform(100000, 900000))+'.gif', dpi=300, writer=PillowWriter(fps=25))
         plt.show()
+
+f = Fireflies(mishra_bird, 0.2, 0.34, 1, 25, 5, [[-10, 0], [-6.5, 0]], minimize = True)
+#f.plot()
+#f = Fireflies(Rosenbrock, 0.2, 0.34, 1, 25, 5, [[-1.5, 1.5], [-1.5, 1.5]], minimize = True)
+#f.run_and_plot()
